@@ -1,0 +1,649 @@
+
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TACTICAL OPS: Cyber Breach</title>
+<style>
+:root {
+  --bg:#080d14; --panel:#101a25; --line:#263b4c;
+  --cyan:#4de6df; --green:#9df5ae; --red:#ff5c70;
+  --text:#e8f2f8; --muted:#8ca2b3;
+}
+* { box-sizing:border-box; }
+body {
+  margin:0; min-height:100vh; background:
+  radial-gradient(ellipse at top,#162b3b 0%,#080d14 65%);
+  color:var(--text); font-family:Consolas,"Courier New",monospace;
+}
+button,input { font:inherit; }
+button {
+  background:var(--cyan); color:#061218; border:0; padding:12px 20px;
+  font-weight:900; cursor:pointer; letter-spacing:1px;
+}
+button:hover { filter:brightness(1.15); }
+button:focus-visible,input:focus-visible { outline:2px solid white; }
+header {
+  max-width:1180px; margin:auto; padding:18px 20px 12px;
+  display:flex; align-items:center; justify-content:space-between; gap:16px;
+  border-bottom:1px solid var(--line);
+}
+.logo { font-size:22px; font-weight:900; letter-spacing:2px; }
+.logo span { color:var(--cyan); }
+.subtitle { font-size:11px; color:var(--muted); margin-top:5px; }
+.status { color:var(--green); font-size:12px; text-align:right; }
+main { max-width:1180px; padding:16px 20px 30px; margin:auto; }
+.hud {
+ display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:10px;
+}
+.hudbox {
+ background:var(--panel); border:1px solid var(--line);
+ padding:10px 13px; min-width:0;
+}
+.hudlabel { font-size:10px; color:var(--muted); letter-spacing:1.5px; }
+.hudvalue { font-size:19px; font-weight:bold; margin-top:6px; }
+#healthText { color:var(--green); }
+#ammoText { color:var(--cyan); }
+#dataText { color:#ffd778; }
+.gameframe {
+ position:relative; border:1px solid #365267;
+ box-shadow:0 0 35px #0008; overflow:hidden; background:#101922;
+}
+canvas { display:block; width:100%; height:auto; cursor:crosshair; }
+#toast {
+ position:absolute; top:14px; left:50%; transform:translateX(-50%);
+ background:#07111de8; border:1px solid var(--cyan); color:white;
+ padding:9px 14px; font-size:12px; text-align:center;
+ pointer-events:none; max-width:90%; display:none;
+}
+#objective {
+ position:absolute; left:12px; bottom:12px; background:#07111de8;
+ border:1px solid var(--line); padding:10px 13px; font-size:12px;
+ max-width:85%; line-height:1.7; pointer-events:none;
+}
+#overlay {
+ position:absolute; inset:0; background:#050a10ed; z-index:5;
+ display:flex; align-items:center; justify-content:center; padding:20px;
+}
+.modal {
+ width:min(470px,100%); border:1px solid #35546a; background:#101a25;
+ padding:28px; box-shadow:0 0 60px #0009;
+}
+.kicker { color:var(--cyan); font-size:11px; letter-spacing:3px; }
+h1 { font-size:30px; margin:12px 0; line-height:1.15; }
+.modal p,.modal li { color:#b4c5d2; font-size:13px; line-height:1.7; }
+.modal ul { padding-left:20px; }
+.modal button { width:100%; margin-top:12px; }
+#puzzleInput {
+ width:100%; padding:13px; margin:8px 0; background:#07111b;
+ color:white; border:1px solid #35546a; outline:none;
+}
+#puzzleFeedback { min-height:22px; color:var(--red); font-size:12px; }
+.controls {
+ display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-top:10px;
+}
+.control {
+ border:1px solid var(--line); background:#101a25; padding:10px;
+ font-size:11px; color:var(--muted); line-height:1.6;
+}
+kbd { color:var(--cyan); font-weight:bold; }
+footer { color:#5f7788; font-size:10px; margin-top:15px; text-align:center; }
+@media(max-width:600px) {
+ header { padding:14px 12px; } main { padding:12px 8px; }
+ .logo { font-size:17px; } .subtitle { font-size:9px; }
+ .hud { grid-template-columns:repeat(2,1fr); }
+ .hudvalue { font-size:16px; } .controls { grid-template-columns:repeat(2,1fr); }
+ h1 { font-size:25px; } .modal { padding:19px; }
+}
+</style>
+</head>
+<body>
+<header>
+ <div>
+  <div class="logo">TACTICAL <span>OPS</span></div>
+  <div class="subtitle">CYBER BREACH // OPERACJA 07</div>
+ </div>
+ <div class="status">● SYSTEM ONLINE<br><span style="color:var(--muted)">TRYB: TAKTYCZNY</span></div>
+</header>
+
+<main>
+ <div class="hud">
+  <div class="hudbox"><div class="hudlabel">ZDROWIE</div><div class="hudvalue" id="healthText">100 HP</div></div>
+  <div class="hudbox"><div class="hudlabel">AMUNICJA</div><div class="hudvalue" id="ammoText">12 / 48</div></div>
+  <div class="hudbox"><div class="hudlabel">DANE</div><div class="hudvalue" id="dataText">0 / 3</div></div>
+  <div class="hudbox"><div class="hudlabel">WYNIK</div><div class="hudvalue" id="scoreText">0000</div></div>
+ </div>
+
+ <div class="gameframe">
+  <canvas id="game" width="1000" height="650" aria-label="Pole gry Tactical Ops"></canvas>
+  <div id="toast"></div>
+  <div id="objective">CEL: Zbierz fragmenty danych (0/3).<br>Oczyść teren i znajdź terminal.</div>
+  <div id="overlay">
+   <div class="modal" id="modal">
+    <div class="kicker">POŁĄCZENIE NAWIĄZANE // 07</div>
+    <h1>CYBER<br><span style="color:var(--cyan)">BREACH</span></h1>
+    <p>Wrogi oddział przejął centrum danych. Zdobądź informacje, złam kod zabezpieczeń i ewakuuj się.</p>
+    <ul>
+     <li>Zbierz 3 fragmenty danych rozsiane po mapie.</li>
+     <li>Unikaj pocisków i eliminuj przeciwników.</li>
+     <li>Aktywuj terminal i rozwiąż zagadkę logiczną.</li>
+     <li>Dotrzyj do zielonej strefy ewakuacji.</li>
+    </ul>
+    <p><b>Wskazówka:</b> amunicja jest ograniczona. Strzelaj celnie, wykorzystuj osłony.</p>
+    <button id="startBtn">ROZPOCZNIJ MISJĘ ▶</button>
+   </div>
+  </div>
+ </div>
+
+ <div class="controls">
+  <div class="control"><kbd>W A S D</kbd><br>Poruszanie się</div>
+  <div class="control"><kbd>MYSZ + LPM</kbd><br>Celowanie i strzelanie</div>
+  <div class="control"><kbd>R</kbd><br>Przeładowanie broni</div>
+  <div class="control"><kbd>E</kbd><br>Zbieranie / terminal / ewakuacja</div>
+ </div>
+ <footer>TACTICAL OPS // SYMULACJA SZKOLENIOWA // WERSJA 1.0 // HTML • CSS • JS</footer>
+</main>
+
+<script>
+(() => {
+"use strict";
+
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+const $ = id => document.getElementById(id);
+const W = canvas.width, H = canvas.height;
+
+const ui = {
+ health:$("healthText"), ammo:$("ammoText"), data:$("dataText"),
+ score:$("scoreText"), objective:$("objective"), overlay:$("overlay"),
+ modal:$("modal"), toast:$("toast")
+};
+
+let running = false, ended = false, puzzleOpen = false, terminalOpen = false;
+let lastTime = 0, toastTimer = 0, reloadTimer = 0, shootCooldown = 0;
+let score = 0, collected = 0, keys = {}, mouse = {x:500,y:325,down:false};
+let bullets = [], enemyBullets = [], particles = [];
+let player, enemies, pickups, terminal, extraction;
+let walls = [];
+
+function resetGame() {
+ score=0; collected=0; ended=false; puzzleOpen=false; terminalOpen=false;
+ bullets=[]; enemyBullets=[]; particles=[]; reloadTimer=0; shootCooldown=0;
+ player={x:72,y:82,r:13,hp:100,ammo:12,reserve:48,angle:0,invuln:0};
+ walls=[
+  {x:150,y:0,w:24,h:175},{x:150,y:245,w:24,h:155},
+  {x:150,y:470,w:24,h:180},
+  {x:275,y:90,w:150,h:22},{x:275,y:90,w:22,h:140},
+  {x:365,y:220,w:170,h:22},
+  {x:485,y:0,w:22,h:120},{x:485,y:165,w:22,h:110},
+  {x:650,y:100,w:150,h:22},{x:650,y:100,w:22,h:170},
+  {x:740,y:245,w:22,h:150},
+  {x:250,y:365,w:145,h:22},{x:250,y:365,w:22,h:120},
+  {x:390,y:455,w:155,h:22},
+  {x:550,y:365,w:22,h:155},{x:550,y:520,w:170,h:22},
+  {x:835,y:370,w:22,h:150},
+  {x:850,y:100,w:22,h:120}
+ ];
+ pickups=[
+  {x:330,y:165,taken:false},
+  {x:615,y:315,taken:false},
+  {x:455,y:565,taken:false}
+ ];
+ terminal={x:900,y:285};
+ extraction={x:930,y:570};
+ enemies=[
+  makeEnemy(365,155),makeEnemy(585,170),makeEnemy(820,300),
+  makeEnemy(650,440),makeEnemy(310,520)
+ ];
+ updateUI();
+}
+
+function makeEnemy(x,y) {
+ return {x,y,r:13,hp:60,alive:true,angle:0,cooldown:0.6+Math.random(),
+  patrolX:x,patrolY:y,phase:Math.random()*6,alert:false};
+}
+
+function updateUI() {
+ ui.health.textContent=Math.max(0,Math.ceil(player.hp))+" HP";
+ ui.health.style.color=player.hp<35?"var(--red)":"var(--green)";
+ ui.ammo.textContent=player.ammo+" / "+player.reserve+(reloadTimer>0?" · ŁADOWANIE":"");
+ ui.data.textContent=collected+" / 3";
+ ui.score.textContent=String(score).padStart(4,"0");
+ if(terminalOpen) {
+  ui.objective.innerHTML="CEL: Terminal odblokowany.<br>Dotrzyj do zielonej strefy ewakuacji.";
+ } else if(collected===3) {
+  ui.objective.innerHTML="CEL: Podejdź do terminala (pomarańczowy).<br>Naciśnij E, aby złamać kod.";
+ } else {
+  ui.objective.innerHTML=`CEL: Zbierz fragmenty danych (${collected}/3).<br>Eliminuj przeciwników i szukaj świecących znaczników.`;
+ }
+}
+
+function showToast(text,ms=2200) {
+ ui.toast.textContent=text;
+ ui.toast.style.display="block";
+ toastTimer=ms/1000;
+}
+
+function distance(a,b) { return Math.hypot(a.x-b.x,a.y-b.y); }
+
+function circleRect(x,y,r,rect) {
+ const nx=Math.max(rect.x,Math.min(x,rect.x+rect.w));
+ const ny=Math.max(rect.y,Math.min(y,rect.y+rect.h));
+ return (x-nx)**2+(y-ny)**2<r*r;
+}
+function blocked(x,y,r) {
+ if(x<r||y<r||x>W-r||y>H-r) return true;
+ return walls.some(w=>circleRect(x,y,r,w));
+}
+function moveEntity(entity,dx,dy,r) {
+ if(!blocked(entity.x+dx,entity.y,r)) entity.x+=dx;
+ if(!blocked(entity.x,entity.y+dy,r)) entity.y+=dy;
+}
+function lineBlocked(x1,y1,x2,y2) {
+ const d=Math.hypot(x2-x1,y2-y1);
+ const steps=Math.ceil(d/8);
+ for(let i=1;i<steps;i++) {
+  const x=x1+(x2-x1)*i/steps, y=y1+(y2-y1)*i/steps;
+  if(walls.some(w=>x>w.x&&x<w.x+w.w&&y>w.y&&y<w.y+w.h)) return true;
+ }
+ return false;
+}
+
+function firePlayer() {
+ if(!running||ended||puzzleOpen||reloadTimer>0||shootCooldown>0) return;
+ if(player.ammo<=0) { showToast("Brak amunicji! Naciśnij R."); shootCooldown=.3; return; }
+ player.ammo--; shootCooldown=.19;
+ const a=player.angle+(Math.random()-.5)*.045;
+ bullets.push({x:player.x+Math.cos(a)*18,y:player.y+Math.sin(a)*18,
+  vx:Math.cos(a)*570,vy:Math.sin(a)*570,life:.85});
+ particles.push({x:player.x+Math.cos(a)*19,y:player.y+Math.sin(a)*19,
+  life:.12,max:.12,color:"#fff1a8"});
+ updateUI();
+}
+
+function reload() {
+ if(!running||ended||puzzleOpen||reloadTimer>0||player.ammo===12||player.reserve<=0) return;
+ reloadTimer=1.1;
+ showToast("Przeładowanie...");
+}
+
+function damagePlayer(amount) {
+ if(player.invuln>0||ended) return;
+ player.hp-=amount; player.invuln=.2;
+ particles.push({x:player.x,y:player.y,life:.3,max:.3,color:"#ff5267"});
+ updateUI();
+ if(player.hp<=0) finish(false);
+}
+
+function finish(won) {
+ ended=true; running=false; mouse.down=false;
+ ui.overlay.style.display="flex";
+ ui.modal.innerHTML=won?`
+  <div class="kicker">MISJA ZAKOŃCZONA // SUKCES</div>
+  <h1 style="color:var(--green)">OPERACJA<br>UDANA</h1>
+  <p>Terminal został złamany. Dane są bezpieczne, a operator dotarł do punktu ewakuacji.</p>
+  <p>Wynik końcowy: <b style="color:var(--cyan)">${score}</b></p>
+  <button id="restartBtn">ZAGRAJ PONOWNIE ↻</button>
+ `:`
+  <div class="kicker">POŁĄCZENIE UTRACONE</div>
+  <h1 style="color:var(--red)">MISJA<br>NIEUDANA</h1>
+  <p>Operator został wyeliminowany. Przeanalizuj trasę, korzystaj z osłon i oszczędzaj amunicję.</p>
+  <p>Wynik: <b style="color:var(--cyan)">${score}</b></p>
+  <button id="restartBtn">SPRÓBUJ PONOWNIE ↻</button>
+ `;
+ $("restartBtn").addEventListener("click",startGame);
+}
+
+function startGame() {
+ resetGame();
+ ui.overlay.style.display="none";
+ running=true;
+ lastTime=performance.now();
+ showToast("Powodzenia, operatorze. Zbierz 3 fragmenty danych.");
+ requestAnimationFrame(loop);
+}
+
+function openPuzzle() {
+ if(collected<3) {
+  showToast(`Brakuje fragmentów danych: ${collected}/3.`);
+  return;
+ }
+ if(terminalOpen) { showToast("Terminal jest już odblokowany."); return; }
+ puzzleOpen=true; mouse.down=false;
+ ui.overlay.style.display="flex";
+ ui.modal.innerHTML=`
+  <div class="kicker">TERMINAL // AUTORYZACJA WYMAGANA</div>
+  <h1>PROTOKÓŁ <span style="color:var(--cyan)">LOGICZNY</span></h1>
+  <p>System wykrył ciąg liczb. Ustal kolejną wartość i wpisz ją poniżej.</p>
+  <div style="background:#07111b;border:1px solid #35546a;padding:18px;text-align:center;font-size:21px;letter-spacing:2px;color:#9df5ae">
+   2 · 6 · 12 · 20 · 30 · ?
+  </div>
+  <p>Wskazówka: sprawdź różnice między kolejnymi liczbami. Jak zmienia się różnica?</p>
+  <form id="puzzleForm">
+   <input id="puzzleInput" type="number" placeholder="Wpisz następną liczbę" autocomplete="off" required>
+   <div id="puzzleFeedback"></div>
+   <button type="submit">WERYFIKUJ KOD</button>
+  </form>
+  <button id="cancelPuzzle" style="background:#263746;color:#dce8f0">WRÓĆ DO GRY</button>
+ `;
+ $("puzzleForm").addEventListener("submit",e=>{
+  e.preventDefault();
+  const value=Number($("puzzleInput").value);
+  if(value===42) {
+   puzzleOpen=false; terminalOpen=true; score+=500;
+   ui.overlay.style.display="none";
+   updateUI();
+   showToast("KOD POPRAWNY! +500 pkt. Udaj się do ewakuacji.");
+  } else {
+   $("puzzleFeedback").textContent="BŁĘDNY KOD. Przeanalizuj różnice między liczbami.";
+  }
+ });
+ $("cancelPuzzle").addEventListener("click",()=>{
+  puzzleOpen=false; ui.overlay.style.display="none";
+ });
+ $("puzzleInput").focus();
+}
+
+function interact() {
+ if(!running||ended||puzzleOpen) return;
+ for(const p of pickups) {
+  if(!p.taken&&distance(player,p)<35) {
+   p.taken=true; collected++; score+=150;
+   particles.push({x:p.x,y:p.y,life:.5,max:.5,color:"#ffd778"});
+   updateUI();
+   showToast(`Fragment danych odzyskany! ${collected}/3 · +150 pkt`);
+   return;
+  }
+ }
+ if(distance(player,terminal)<48) {
+  openPuzzle(); return;
+ }
+ if(distance(player,extraction)<48) {
+  if(terminalOpen) { score+=Math.ceil(player.hp)*2; finish(true); }
+  else showToast("Ewakuacja zablokowana. Najpierw odblokuj terminal.");
+  return;
+ }
+ showToast("Brak interakcji. Podejdź bliżej obiektu.");
+}
+
+function update(dt) {
+ if(!running||puzzleOpen||ended) return;
+ shootCooldown=Math.max(0,shootCooldown-dt);
+ player.invuln=Math.max(0,player.invuln-dt);
+ if(reloadTimer>0) {
+  reloadTimer-=dt;
+  if(reloadTimer<=0) {
+   const n=Math.min(12-player.ammo,player.reserve);
+   player.ammo+=n; player.reserve-=n; updateUI();
+   showToast("Broń przeładowana.");
+  }
+ }
+ let dx=0,dy=0;
+ if(keys.w||keys.arrowup) dy--;
+ if(keys.s||keys.arrowdown) dy++;
+ if(keys.a||keys.arrowleft) dx--;
+ if(keys.d||keys.arrowright) dx++;
+ if(dx||dy) {
+  const n=Math.hypot(dx,dy); dx=dx/n*220*dt; dy=dy/n*220*dt;
+  moveEntity(player,dx,dy,player.r);
+ }
+ player.angle=Math.atan2(mouse.y-player.y,mouse.x-player.x);
+ if(mouse.down) firePlayer();
+
+ for(let i=bullets.length-1;i>=0;i--) {
+  const b=bullets[i]; b.x+=b.vx*dt; b.y+=b.vy*dt; b.life-=dt;
+  let remove=b.life<=0||blocked(b.x,b.y,2);
+  if(!remove) {
+   for(const e of enemies) {
+    if(e.alive&&Math.hypot(e.x-b.x,e.y-b.y)<e.r+3) {
+     e.hp-=35; remove=true;
+     particles.push({x:b.x,y:b.y,life:.2,max:.2,color:"#ff8790"});
+     if(e.hp<=0) {
+      e.alive=false; score+=100;
+      particles.push({x:e.x,y:e.y,life:.5,max:.5,color:"#ff5c70"});
+      showToast("Przeciwnik wyeliminowany · +100 pkt");
+      updateUI();
+     }
+     break;
+    }
+   }
+  }
+  if(remove) bullets.splice(i,1);
+ }
+
+ for(let i=enemyBullets.length-1;i>=0;i--) {
+  const b=enemyBullets[i]; b.x+=b.vx*dt; b.y+=b.vy*dt; b.life-=dt;
+  if(Math.hypot(player.x-b.x,player.y-b.y)<player.r+3) {
+   damagePlayer(9); enemyBullets.splice(i,1); continue;
+  }
+  if(b.life<=0||blocked(b.x,b.y,2)) enemyBullets.splice(i,1);
+ }
+
+ for(const e of enemies) {
+  if(!e.alive) continue;
+  e.phase+=dt;
+  e.cooldown-=dt;
+  const d=distance(player,e);
+  const visible=d<340&&!lineBlocked(e.x,e.y,player.x,player.y);
+  e.alert=visible;
+  if(visible) {
+   e.angle=Math.atan2(player.y-e.y,player.x-e.x);
+   if(d>155) {
+    const vx=Math.cos(e.angle)*95*dt, vy=Math.sin(e.angle)*95*dt;
+    if(!blocked(e.x+vx,e.y,e.r)) e.x+=vx;
+    if(!blocked(e.x,e.y+vy,e.r)) e.y+=vy;
+   }
+   if(d<340&&e.cooldown<=0) {
+    const a=e.angle+(Math.random()-.5)*.15;
+    enemyBullets.push({x:e.x+Math.cos(a)*15,y:e.y+Math.sin(a)*15,
+     vx:Math.cos(a)*250,vy:Math.sin(a)*250,life:1.6});
+    e.cooldown=1.05+Math.random()*.8;
+   }
+  } else {
+   const tx=e.patrolX+Math.cos(e.phase*.45)*40;
+   const ty=e.patrolY+Math.sin(e.phase*.6)*30;
+   const a=Math.atan2(ty-e.y,tx-e.x);
+   if(Math.hypot(tx-e.x,ty-e.y)>5) {
+    const vx=Math.cos(a)*24*dt,vy=Math.sin(a)*24*dt;
+    if(!blocked(e.x+vx,e.y,e.r)) e.x+=vx;
+    if(!blocked(e.x,e.y+vy,e.r)) e.y+=vy;
+   }
+  }
+  if(d<e.r+player.r+2) damagePlayer(12*dt);
+ }
+
+ for(let i=particles.length-1;i>=0;i--) {
+  particles[i].life-=dt;
+  if(particles[i].life<=0) particles.splice(i,1);
+ }
+ updateUI();
+ if(toastTimer>0) {
+  toastTimer-=dt;
+  if(toastTimer<=0) ui.toast.style.display="none";
+ }
+}
+
+function drawFloor() {
+ ctx.fillStyle="#131e28"; ctx.fillRect(0,0,W,H);
+ ctx.strokeStyle="#1b2a36"; ctx.lineWidth=1;
+ for(let x=0;x<W;x+=40) {
+  ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();
+ }
+ for(let y=0;y<H;y+=40) {
+  ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();
+ }
+ // oznaczenia taktyczne
+ ctx.fillStyle="#253644";ctx.font="10px Consolas";
+ ctx.fillText("SEKTOR A // WEJŚCIE",22,28);
+ ctx.fillText("SEKTOR B // SERWEROWNIA",530,28);
+ ctx.fillText("SEKTOR C // EWAKUACJA",760,635);
+ ctx.strokeStyle="#29414f";ctx.setLineDash([6,8]);
+ ctx.strokeRect(8,8,W-16,H-16);ctx.setLineDash([]);
+}
+
+function drawWalls() {
+ for(const w of walls) {
+  ctx.fillStyle="#253745";ctx.fillRect(w.x,w.y,w.w,w.h);
+  ctx.fillStyle="#344e5f";ctx.fillRect(w.x,w.y,w.w,4);
+  ctx.strokeStyle="#0a121a";ctx.lineWidth=2;ctx.strokeRect(w.x,w.y,w.w,w.h);
+  // metalowe detale
+  if(w.w>w.h) {
+   for(let x=w.x+12;x<w.x+w.w-5;x+=25) {
+    ctx.fillStyle="#172530";ctx.fillRect(x,w.y+7,9,5);
+   }
+  } else {
+   for(let y=w.y+12;y<w.y+w.h-5;y+=25) {
+    ctx.fillStyle="#172530";ctx.fillRect(w.x+7,y,5,9);
+   }
+  }
+ }
+}
+
+function drawPickup(p) {
+ if(p.taken) return;
+ const pulse=1+Math.sin(performance.now()/180)*.12;
+ ctx.save();ctx.translate(p.x,p.y);ctx.scale(pulse,pulse);
+ ctx.shadowBlur=20;ctx.shadowColor="#ffd778";ctx.fillStyle="#ffd778";
+ ctx.fillRect(-8,-8,16,16);ctx.shadowBlur=0;
+ ctx.fillStyle="#17202a";ctx.fillRect(-4,-4,8,8);
+ ctx.strokeStyle="#ffe9ac";ctx.strokeRect(-12,-12,24,24);
+ ctx.restore();
+}
+
+function drawTerminal() {
+ const active=terminalOpen;
+ ctx.save();ctx.translate(terminal.x,terminal.y);
+ ctx.fillStyle="#253746";ctx.fillRect(-19,-20,38,40);
+ ctx.fillStyle=active?"#9df5ae":"#ffad57";
+ ctx.shadowBlur=18;ctx.shadowColor=ctx.fillStyle;ctx.fillRect(-12,-13,24,19);
+ ctx.shadowBlur=0;
+ ctx.fillStyle="#14202a";ctx.font="bold 10px Consolas";ctx.textAlign="center";
+ ctx.fillText(active?"OK":"SYS",0,-1);
+ ctx.fillStyle="#91a9b7";ctx.fillRect(-8,11,16,4);
+ ctx.restore();
+}
+
+function drawExtraction() {
+ const pulse=1+Math.sin(performance.now()/250)*.04;
+ ctx.save();ctx.translate(extraction.x,extraction.y);ctx.scale(pulse,pulse);
+ ctx.strokeStyle=terminalOpen?"#9df5ae":"#4a6875";
+ ctx.lineWidth=2;ctx.strokeRect(-28,-28,56,56);
+ ctx.strokeRect(-19,-19,38,38);
+ ctx.fillStyle=terminalOpen?"#9df5ae33":"#5a788522";ctx.fillRect(-25,-25,50,50);
+ ctx.fillStyle=terminalOpen?"#9df5ae":"#718a97";
+ ctx.font="bold 9px Consolas";ctx.textAlign="center";ctx.fillText("EXIT",0,4);
+ ctx.restore();
+}
+
+function drawPlayer() {
+ ctx.save();ctx.translate(player.x,player.y);ctx.rotate(player.angle);
+ ctx.fillStyle="#3cdbc9";ctx.fillRect(-8,-11,17,22);
+ ctx.fillStyle="#b8fff5";ctx.fillRect(1,-7,9,14);
+ ctx.fillStyle="#d9e9ec";ctx.fillRect(4,-4,20,8);
+ ctx.fillStyle="#071a20";ctx.fillRect(-8,-13,9,26);
+ ctx.restore();
+ ctx.strokeStyle="#75f8e7";ctx.lineWidth=1.5;
+ ctx.beginPath();ctx.arc(player.x,player.y,player.r+3,0,Math.PI*2);ctx.stroke();
+ if(player.invuln>0) {
+  ctx.strokeStyle="#ff5267";ctx.beginPath();ctx.arc(player.x,player.y,22,0,Math.PI*2);ctx.stroke();
+ }
+ // celownik
+ ctx.strokeStyle="#d7ffff";ctx.lineWidth=1;
+ ctx.beginPath();ctx.arc(mouse.x,mouse.y,7,0,Math.PI*2);
+ ctx.moveTo(mouse.x-12,mouse.y);ctx.lineTo(mouse.x-4,mouse.y);
+ ctx.moveTo(mouse.x+4,mouse.y);ctx.lineTo(mouse.x+12,mouse.y);
+ ctx.moveTo(mouse.x,mouse.y-12);ctx.lineTo(mouse.x,mouse.y-4);
+ ctx.moveTo(mouse.x,mouse.y+4);ctx.lineTo(mouse.x,mouse.y+12);ctx.stroke();
+}
+
+function drawEnemies() {
+ for(const e of enemies) {
+  if(!e.alive) continue;
+  ctx.save();ctx.translate(e.x,e.y);ctx.rotate(e.angle);
+  ctx.fillStyle="#73313f";ctx.fillRect(-9,-12,19,24);
+  ctx.fillStyle="#ff6579";ctx.fillRect(-4,-8,12,16);
+  ctx.fillStyle="#f3c8c8";ctx.fillRect(2,-4,17,8);
+  ctx.fillStyle="#20202a";ctx.fillRect(-10,-14,10,28);
+  ctx.restore();
+  if(e.alert) {
+   ctx.fillStyle="#ff5c70";ctx.fillRect(e.x-15,e.y-23,30,3);
+   ctx.fillStyle="#ff5c70";ctx.fillRect(e.x-15,e.y-23,30*Math.max(0,e.hp/60),3);
+   ctx.fillStyle="#ffb5be";ctx.font="10px Consolas";ctx.textAlign="center";
+   ctx.fillText("!",e.x,e.y-29);
+  }
+ }
+}
+
+function drawBullets() {
+ for(const b of bullets) {
+  ctx.fillStyle="#fff1a8";ctx.shadowBlur=8;ctx.shadowColor="#ffdb71";
+  ctx.beginPath();ctx.arc(b.x,b.y,3,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
+ }
+ for(const b of enemyBullets) {
+  ctx.fillStyle="#ff5267";ctx.shadowBlur=8;ctx.shadowColor="#ff5267";
+  ctx.beginPath();ctx.arc(b.x,b.y,3,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
+ }
+ for(const p of particles) {
+  ctx.globalAlpha=Math.max(0,p.life/p.max);ctx.fillStyle=p.color;
+  ctx.beginPath();ctx.arc(p.x,p.y,3+5*(1-p.life/p.max),0,Math.PI*2);ctx.fill();
+  ctx.globalAlpha=1;
+ }
+}
+
+function draw() {
+ drawFloor();
+ drawExtraction();
+ drawTerminal();
+ pickups.forEach(drawPickup);
+ drawWalls();
+ drawBullets();
+ drawEnemies();
+ drawPlayer();
+ // wskaźnik interakcji
+ let near=null,label="";
+ for(const p of pickups) if(!p.taken&&distance(player,p)<40){near=p;label="E  ZBIERZ DANE";}
+ if(distance(player,terminal)<48){near=terminal;label=terminalOpen?"TERMINAL ODBLOKOWANY":"E  HAKUJ TERMINAL";}
+ if(distance(player,extraction)<48){near=extraction;label=terminalOpen?"E  EWAKUACJA":"EWAKUACJA ZABLOKOWANA";}
+ if(near) {
+  ctx.fillStyle="#07111de8";ctx.fillRect(near.x-68,near.y-47,136,20);
+  ctx.strokeStyle="#4de6df";ctx.strokeRect(near.x-68,near.y-47,136,20);
+  ctx.fillStyle="#dff";ctx.font="11px Consolas";ctx.textAlign="center";
+  ctx.fillText(label,near.x,near.y-33);
+ }
+}
+
+function loop(time) {
+ if(!running) return;
+ const dt=Math.min((time-lastTime)/1000,.04);lastTime=time;
+ update(dt);draw();
+ if(running) requestAnimationFrame(loop);
+}
+
+window.addEventListener("keydown",e=>{
+ const k=e.key.toLowerCase();
+ if(["w","a","s","d","arrowup","arrowdown","arrowleft","arrowright"," "].includes(k)) e.preventDefault();
+ keys[k]=true;
+ if(k==="r") reload();
+ if(k==="e") interact();
+});
+window.addEventListener("keyup",e=>{keys[e.key.toLowerCase()]=false;});
+canvas.addEventListener("mousemove",e=>{
+ const rect=canvas.getBoundingClientRect();
+ mouse.x=(e.clientX-rect.left)*W/rect.width;
+ mouse.y=(e.clientY-rect.top)*H/rect.height;
+});
+canvas.addEventListener("mousedown",e=>{
+ if(e.button===0){mouse.down=true;firePlayer();}
+});
+window.addEventListener("mouseup",()=>{mouse.down=false;});
+canvas.addEventListener("contextmenu",e=>e.preventDefault());
+$("startBtn").addEventListener("click",startGame);
+
+// Rysunek planszy startowej i pierwsza konfiguracja.
+resetGame();
+draw();
+})();
+</script>
+</body>
+</html>

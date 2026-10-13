@@ -1,0 +1,706 @@
+
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CIRCUIT BREAKER — Przeciążenie</title>
+<style>
+:root {
+  --bg:#080d18;
+  --panel:#101a2a;
+  --panel2:#152238;
+  --line:#243750;
+  --cyan:#48f2df;
+  --blue:#5797ff;
+  --green:#72ffad;
+  --red:#ff657f;
+  --text:#eaf3ff;
+  --muted:#91a6c1;
+  --yellow:#ffd36a;
+}
+* { box-sizing:border-box; }
+body {
+  margin:0;
+  min-height:100vh;
+  color:var(--text);
+  background:
+    radial-gradient(ellipse at 50% -20%,#18314b 0,transparent 55%),
+    linear-gradient(145deg,#080d18,#0b1321 60%,#080d18);
+  font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+button { font:inherit; }
+button:focus-visible { outline:2px solid white; outline-offset:3px; }
+.app { max-width:1160px; padding:24px 20px 45px; margin:auto; }
+header {
+  display:flex; align-items:center; justify-content:space-between;
+  gap:20px; padding:8px 0 22px; border-bottom:1px solid #26374b;
+}
+.brand { display:flex; align-items:center; gap:12px; }
+.logo {
+  width:44px;height:44px;display:grid;place-items:center;
+  color:var(--cyan);font-size:24px;
+  border:1px solid #326b78;border-radius:12px;
+  background:#102833;box-shadow:0 0 25px #48f2df14;
+}
+.brand h1 { margin:0;font-size:18px;letter-spacing:2px; }
+.brand small { display:block;color:var(--muted);font-size:10px;letter-spacing:3px;margin-top:4px; }
+.status { display:flex;align-items:center;gap:8px;color:var(--green);font-size:12px;letter-spacing:1px; }
+.dot { width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 12px var(--green);animation:pulse 1.5s infinite; }
+@keyframes pulse { 50% { opacity:.35; } }
+
+.intro { padding:26px 0 20px; }
+.eyebrow { color:var(--cyan);font-size:11px;letter-spacing:3px;font-weight:800; }
+h2 { font-size:clamp(27px,4vw,43px);letter-spacing:-1.5px;margin:9px 0 8px;line-height:1.1; }
+.intro p { color:var(--muted);margin:0;max-width:650px;line-height:1.65;font-size:14px; }
+.stats { display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:20px 0; }
+.stat {
+  background:linear-gradient(135deg,#142136,#0e1827);
+  border:1px solid var(--line);border-radius:13px;padding:16px;
+}
+.stat label { display:block;font-size:10px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase; }
+.stat strong { display:block;font-size:25px;margin-top:8px;font-variant-numeric:tabular-nums; }
+.stat .accent { color:var(--cyan); }
+.main { display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:18px;align-items:start; }
+.board-panel,.side-panel {
+  background:linear-gradient(150deg,#111d30,#0c1524);
+  border:1px solid var(--line);border-radius:17px;overflow:hidden;
+}
+.panel-head {
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding:17px 19px;border-bottom:1px solid var(--line);
+}
+.panel-head h3 { margin:0;font-size:13px;letter-spacing:1.5px; }
+.mini-status { font-size:10px;color:var(--cyan);letter-spacing:1px; }
+.board-wrap { padding:clamp(12px,3vw,27px); }
+.legend { display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px;font-size:11px;color:var(--muted); }
+.legend span { display:flex;align-items:center;gap:7px; }
+.legend i { width:8px;height:8px;border-radius:50%;display:inline-block; }
+.source-color { background:var(--green); }
+.target-color { background:var(--yellow); }
+.wire-color { background:var(--cyan); }
+
+.board {
+  display:grid;gap:5px;max-width:610px;margin:auto;
+  padding:8px;border-radius:12px;border:1px solid #233850;
+  background-color:#080f1c;
+  background-image:linear-gradient(#14233755 1px,transparent 1px),linear-gradient(90deg,#14233755 1px,transparent 1px);
+  background-size:20px 20px;
+}
+.tile {
+  position:relative;aspect-ratio:1;min-width:0;padding:0;
+  border:1px solid #263951;border-radius:6px;
+  background:linear-gradient(145deg,#16263b,#101a2b);
+  cursor:pointer;overflow:hidden;transition:background .15s,border-color .15s,transform .15s;
+}
+.tile:hover { border-color:#56a9d8;background:#1a3046;z-index:2; }
+.tile:active { transform:scale(.94); }
+.tile.connected { background:linear-gradient(145deg,#123c40,#102c37);border-color:#287d80; }
+.tile.source { border-color:var(--green);box-shadow:inset 0 0 15px #72ffad15; }
+.tile.target { border-color:var(--yellow);box-shadow:inset 0 0 15px #ffd36a15; }
+.tile.powered .arm,.tile.powered .core { background:var(--green);box-shadow:0 0 9px #72ffad9c; }
+.tile.source .core { background:var(--green); }
+.tile.target .core { background:var(--yellow); }
+.arm {
+  position:absolute;left:50%;top:50%;width:22%;height:22%;
+  background:#438d9e;transform:translate(-50%,-50%);border-radius:3px;
+  transition:background .2s;
+}
+.arm.n { top:0;height:50%; }
+.arm.s { top:100%;height:50%; }
+.arm.e { left:100%;width:50%; }
+.arm.w { left:0;width:50%; }
+.core {
+  position:absolute;left:50%;top:50%;width:23%;height:23%;
+  transform:translate(-50%,-50%);border-radius:50%;
+  background:#438d9e;border:1px solid #7bbdc7;
+}
+.tile.source .core,.tile.target .core { width:32%;height:32%; }
+.tile.source .core { animation:sourceGlow 1.5s infinite; }
+@keyframes sourceGlow { 50% { box-shadow:0 0 13px var(--green); } }
+.tile-num {
+  position:absolute;right:3px;top:2px;color:#8199b5;
+  font-size:8px;opacity:.6;pointer-events:none;
+}
+.tile.source::after,.tile.target::after {
+  position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  font-size:clamp(8px,1.3vw,12px);font-weight:900;pointer-events:none;
+}
+.tile.source::after { content:"S";color:#06251c; }
+.tile.target::after { content:"R";color:#392b08; }
+.tile.source .core,.tile.target .core { z-index:0; }
+.tile.source::after,.tile.target::after { z-index:1; }
+.tile:disabled { cursor:default; }
+.tile:disabled:hover { transform:none; }
+.board-footer { display:flex;justify-content:space-between;gap:12px;align-items:center;margin-top:15px;color:var(--muted);font-size:11px; }
+.key { border:1px solid #35465d;border-radius:5px;padding:4px 7px;color:#dceaff;white-space:nowrap; }
+
+.side-panel { padding:0; }
+.side-section { padding:18px;border-bottom:1px solid var(--line); }
+.side-section:last-child { border-bottom:0; }
+.side-section h3 { font-size:11px;letter-spacing:1.7px;margin:0 0 14px;color:#c6d9f2; }
+.levels { display:grid;grid-template-columns:repeat(5,1fr);gap:5px; }
+.level {
+  aspect-ratio:1;border-radius:7px;border:1px solid #293b52;
+  background:#101b2b;color:#8ba2bf;font-size:12px;cursor:pointer;
+}
+.level.active { background:#163f48;color:var(--cyan);border-color:var(--cyan);box-shadow:inset 0 0 10px #48f2df15; }
+.level.done { color:var(--green);border-color:#326c59; }
+.level:disabled { cursor:not-allowed;opacity:.45; }
+.level-note { margin:10px 0 0;font-size:11px;color:var(--muted);line-height:1.5; }
+.objective { padding:12px;border:1px solid #2b455a;border-radius:9px;background:#0d1c2b; }
+.objective strong { display:block;color:var(--cyan);font-size:12px;margin-bottom:5px; }
+.objective p { font-size:11px;color:var(--muted);line-height:1.6;margin:0; }
+.progress-track { height:5px;background:#243449;border-radius:5px;overflow:hidden;margin-top:12px; }
+.progress-bar { height:100%;width:0;background:linear-gradient(90deg,var(--blue),var(--cyan));transition:width .3s; }
+.controls { display:grid;gap:8px; }
+.btn {
+  padding:11px 12px;border:1px solid #30465f;border-radius:8px;
+  background:#15243a;color:var(--text);cursor:pointer;font-size:12px;font-weight:700;
+  transition:transform .15s,border-color .15s,background .15s;
+}
+.btn:hover { border-color:var(--cyan);transform:translateY(-1px); }
+.btn.primary { background:var(--cyan);color:#072020;border-color:var(--cyan); }
+.btn.primary:hover { background:#8bfff1; }
+.btn:disabled { opacity:.4;cursor:not-allowed;transform:none; }
+.hint-text { display:none;font-size:11px;color:var(--yellow);line-height:1.6;margin:12px 0 0; }
+.hint-text.show { display:block; }
+.message {
+  margin-top:16px;border:1px solid #293b52;border-radius:10px;padding:13px 15px;
+  display:flex;gap:11px;align-items:flex-start;background:#101a2a;min-height:58px;
+}
+.message-icon { color:var(--cyan);font-size:17px; }
+.message p { font-size:12px;color:var(--muted);line-height:1.5;margin:0; }
+.message strong { color:var(--text); }
+.message.success { border-color:#397a60;background:#10271f; }
+.message.success .message-icon { color:var(--green); }
+footer { text-align:center;color:#5d7490;font-size:10px;letter-spacing:1px;margin-top:25px; }
+.overlay {
+  position:fixed;inset:0;display:none;align-items:center;justify-content:center;
+  padding:20px;background:#050a12dc;backdrop-filter:blur(8px);z-index:10;
+}
+.overlay.show { display:flex;animation:fadeIn .25s; }
+@keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
+.modal {
+  width:min(440px,100%);padding:30px;border-radius:18px;text-align:center;
+  border:1px solid #397a82;background:linear-gradient(145deg,#142b3a,#101728);
+  box-shadow:0 20px 90px #0009;
+}
+.modal-icon { font-size:40px;color:var(--green); }
+.modal h2 { font-size:29px;letter-spacing:-.5px; }
+.modal p { color:var(--muted);font-size:13px;line-height:1.7; }
+.modal-score { font-size:35px;font-weight:900;color:var(--cyan);margin:18px 0; }
+.modal .btn { width:100%;margin-top:8px; }
+@media(max-width:820px) {
+  .main { grid-template-columns:1fr; }
+  .side-panel { display:grid;grid-template-columns:1fr 1fr; }
+  .side-section { border-bottom:1px solid var(--line); }
+  .side-section:nth-child(odd) { border-right:1px solid var(--line); }
+}
+@media(max-width:480px) {
+  .app { padding:15px 12px 30px; }
+  .brand h1 { font-size:14px; }
+  .brand small { letter-spacing:1.5px;font-size:9px; }
+  .logo { width:38px;height:38px; }
+  .status { font-size:9px; }
+  .stats { grid-template-columns:repeat(2,1fr);gap:8px; }
+  .stat { padding:12px; }
+  .stat strong { font-size:22px; }
+  .side-panel { grid-template-columns:1fr; }
+  .side-section:nth-child(odd) { border-right:0; }
+  .board { gap:3px;padding:5px; }
+  .tile { border-radius:4px; }
+  .tile-num { font-size:6px;right:1px;top:1px; }
+  .board-footer { font-size:10px; }
+}
+@media(prefers-reduced-motion:reduce) {
+  *,*::before,*::after { animation-duration:.01ms!important;transition-duration:.01ms!important; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">
+      <div class="logo">ϟ</div>
+      <div><h1>CIRCUIT BREAKER</h1><small>LABORATORIUM ENERGII // 2049</small></div>
+    </div>
+    <div class="status"><span class="dot"></span> SYSTEM ONLINE</div>
+  </header>
+
+  <section class="intro">
+    <div class="eyebrow">WYZWANIE LOGICZNE / <span id="chapter">01</span></div>
+    <h2>Przywróć przepływ energii<span style="color:var(--cyan)">.</span></h2>
+    <p>Sieć została uszkodzona. Obracaj moduły, analizuj połączenia i doprowadź energię ze źródła <strong style="color:var(--green)">S</strong> do rdzenia <strong style="color:var(--yellow)">R</strong>. Każdy ruch ma znaczenie.</p>
+  </section>
+
+  <section class="stats">
+    <div class="stat"><label>Wynik</label><strong class="accent" id="score">0</strong></div>
+    <div class="stat"><label>Ruchy</label><strong id="moves">0</strong></div>
+    <div class="stat"><label>Czas</label><strong id="time">00:00</strong></div>
+    <div class="stat"><label>Ukończone</label><strong id="completed">0<span style="font-size:14px;color:var(--muted)"> / 5</span></strong></div>
+  </section>
+
+  <div class="main">
+    <section>
+      <div class="board-panel">
+        <div class="panel-head">
+          <h3>▦ SIATKA OBWODU</h3>
+          <span class="mini-status" id="boardState">OCZEKIWANIE NA SYGNAŁ</span>
+        </div>
+        <div class="board-wrap">
+          <div class="legend">
+            <span><i class="source-color"></i> ŹRÓDŁO</span>
+            <span><i class="target-color"></i> RDZEŃ</span>
+            <span><i class="wire-color"></i> PRZEWÓD</span>
+          </div>
+          <div id="board" class="board" role="group" aria-label="Plansza z obracanymi modułami obwodu"></div>
+          <div class="board-footer">
+            <span id="boardSize">SIATKA 5 × 5</span>
+            <span><span class="key">KLIK</span> Obróć moduł o 90°</span>
+          </div>
+        </div>
+      </div>
+      <div class="message" id="message" role="status" aria-live="polite">
+        <div class="message-icon">⌁</div>
+        <p><strong>System diagnostyczny:</strong> Połączenie przerwane. Znajdź właściwe ustawienie modułów.</p>
+      </div>
+    </section>
+
+    <aside class="side-panel">
+      <div class="side-section">
+        <h3>POZIOM DOSTĘPU</h3>
+        <div class="levels" id="levels"></div>
+        <p class="level-note" id="levelNote">Poziom 1 · Rozgrzewka<br>Plansza 5 × 5</p>
+      </div>
+      <div class="side-section">
+        <h3>CEL MISJI</h3>
+        <div class="objective">
+          <strong id="objectiveTitle">Nawiąż połączenie</strong>
+          <p id="objectiveText">Przesyłaj energię przez sąsiadujące moduły. Łącz wyjścia przewodów z wejściami kolejnych elementów.</p>
+          <div class="progress-track"><div class="progress-bar" id="progress"></div></div>
+        </div>
+      </div>
+      <div class="side-section">
+        <h3>NARZĘDZIA TECHNIKA</h3>
+        <div class="controls">
+          <button class="btn primary" id="hintBtn">◈ Analizuj sygnał (podpowiedź)</button>
+          <button class="btn" id="resetBtn">↻ Zresetuj poziom</button>
+          <button class="btn" id="nextBtn" disabled>Następny poziom →</button>
+        </div>
+        <p class="hint-text" id="hintText"></p>
+      </div>
+      <div class="side-section">
+        <h3>PROTOKÓŁ</h3>
+        <p class="level-note" style="margin:0">
+          <span style="color:var(--green)">●</span> Zielony — energia przepływa<br><br>
+          <span style="color:var(--cyan)">●</span> Turkusowy — moduł sieci<br><br>
+          <span style="color:var(--yellow)">●</span> Żółty — rdzeń docelowy<br><br>
+          <span style="color:var(--red)">●</span> Czerwony — błąd połączenia
+        </p>
+      </div>
+    </aside>
+  </div>
+  <footer>CB // PROGRAM KSZTAŁCENIA TECHNICZNEGO · MYŚL LOGICZNIE. DZIAŁAJ PRECYZYJNIE.</footer>
+</div>
+
+<div class="overlay" id="overlay" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+  <div class="modal">
+    <div class="modal-icon" id="modalIcon">✦</div>
+    <div class="eyebrow" id="modalEyebrow">MISJA ZAKOŃCZONA</div>
+    <h2 id="modalTitle">Energia przywrócona!</h2>
+    <p id="modalText">Sieć działa prawidłowo.</p>
+    <div class="modal-score" id="modalScore">+500 pkt</div>
+    <button class="btn primary" id="modalNext">Następna misja →</button>
+    <button class="btn" id="modalClose">Pozostań na planszy</button>
+  </div>
+</div>
+
+<script>
+(() => {
+  "use strict";
+
+  const $ = id => document.getElementById(id);
+  const DIRS = [
+    {name:"n", dr:-1, dc:0, opposite:2},
+    {name:"e", dr:0, dc:1, opposite:3},
+    {name:"s", dr:1, dc:0, opposite:0},
+    {name:"w", dr:0, dc:-1, opposite:1}
+  ];
+
+  const LEVELS = [
+    {size:5,  title:"Rozgrzewka",   scramble:2,  points:150},
+    {size:5,  title:"Nowa topologia",scramble:4, points:250},
+    {size:7,  title:"Przeciążenie", scramble:5,  points:400},
+    {size:7,  title:"Sieć krytyczna",scramble:7, points:600},
+    {size:9,  title:"Protokół zero",scramble:9, points:900}
+  ];
+
+  let level = 0;
+  let tiles = [];
+  let solution = [];
+  let moves = 0;
+  let score = 0;
+  let hintsUsed = 0;
+  let completed = new Set();
+  let startedAt = 0;
+  let timerId = null;
+  let won = false;
+  let best = {};
+  let initialRotations = [];
+
+  try {
+    const saved = JSON.parse(localStorage.getItem("circuitBreakerSave") || "{}");
+    score = Number(saved.score) || 0;
+    completed = new Set(Array.isArray(saved.completed) ? saved.completed : []);
+    best = saved.best && typeof saved.best === "object" ? saved.best : {};
+  } catch (_) {}
+
+  // Tworzy trasę w kształcie węża, przechodzącą przez całą planszę.
+  // Dla nieparzystej planszy zaczyna się w lewym górnym rogu,
+  // a kończy w prawym dolnym rogu.
+  function makePath(n) {
+    const path = [];
+    for (let r = 0; r < n; r++) {
+      if (r % 2 === 0) {
+        for (let c = 0; c < n; c++) path.push(r*n+c);
+      } else {
+        for (let c = n-1; c >= 0; c--) path.push(r*n+c);
+      }
+    }
+    return path;
+  }
+
+  function rotatePorts(ports, turns = 1) {
+    return ports.map(d => (d + turns) % 4);
+  }
+
+  function portsForPath(path, n) {
+    const result = Array(n*n).fill(null).map(() => []);
+    path.forEach((cell, i) => {
+      const r = Math.floor(cell/n), c = cell%n;
+      const neighbors = [];
+      if (i > 0) neighbors.push(path[i-1]);
+      if (i < path.length-1) neighbors.push(path[i+1]);
+      neighbors.forEach(next => {
+        const nr = Math.floor(next/n), nc = next%n;
+        if (nr < r) result[cell].push(0);
+        if (nc > c) result[cell].push(1);
+        if (nr > r) result[cell].push(2);
+        if (nc < c) result[cell].push(3);
+      });
+    });
+    return result;
+  }
+
+  function shuffleBoard() {
+    const n = LEVELS[level].size;
+    const path = makePath(n);
+    solution = portsForPath(path, n);
+    tiles = solution.map((ports, i) => ({
+      ports: [...ports],
+      original: [...ports],
+      pathIndex: i,
+      rotation: 0
+    }));
+
+    // Rozpraszamy poprawne ustawienia. Losowania dotyczą obrotów
+    // elementów, nie połączeń — dlatego każda plansza ma rozwiązanie.
+    tiles.forEach((tile, i) => {
+      let turns = Math.floor(Math.random()*4);
+      if (i === 0 || i === tiles.length-1) {
+        // Obrót końcówek również ma znaczenie.
+        turns = Math.floor(Math.random()*4);
+      }
+      tile.rotation = turns;
+      tile.ports = rotatePorts(tile.original, turns);
+    });
+
+    // Plansza nie powinna rozpoczynać się jako rozwiązana.
+    if (isConnected()) {
+      const i = Math.floor(Math.random()*tiles.length);
+      tiles[i].rotation = (tiles[i].rotation+1)%4;
+      tiles[i].ports = rotatePorts(tiles[i].original,tiles[i].rotation);
+    }
+    initialRotations = tiles.map(t => t.rotation);
+  }
+
+  function hasPort(index, dir) {
+    return tiles[index].ports.includes(dir);
+  }
+
+  // Sprawdza rzeczywisty przepływ przez sąsiadujące, zgodne porty.
+  function getPowered() {
+    const n = LEVELS[level].size;
+    const visited = new Set([0]);
+    const queue = [0];
+
+    while (queue.length) {
+      const index = queue.shift();
+      const r = Math.floor(index/n), c = index%n;
+
+      for (let d = 0; d < 4; d++) {
+        if (!hasPort(index,d)) continue;
+        const nr = r+DIRS[d].dr, nc = c+DIRS[d].dc;
+        if (nr<0 || nc<0 || nr>=n || nc>=n) continue;
+
+        const next = nr*n+nc;
+        if (!hasPort(next,DIRS[d].opposite) || visited.has(next)) continue;
+        visited.add(next);
+        queue.push(next);
+      }
+    }
+    return visited;
+  }
+
+  function isConnected() {
+    return getPowered().has(tiles.length-1);
+  }
+
+  function renderBoard() {
+    const n = LEVELS[level].size;
+    const board = $("board");
+    board.style.gridTemplateColumns = `repeat(${n}, minmax(0, 1fr))`;
+    board.innerHTML = "";
+
+    const powered = getPowered();
+
+    tiles.forEach((tile,i) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "tile";
+      button.setAttribute("aria-label", tileLabel(tile,i,n));
+      button.title = tileLabel(tile,i,n);
+      if (i===0) button.classList.add("source");
+      if (i===tiles.length-1) button.classList.add("target");
+      if (powered.has(i)) button.classList.add("powered","connected");
+      if (won) button.disabled = true;
+
+      tile.ports.forEach(dir => {
+        const arm = document.createElement("span");
+        arm.className = "arm "+DIRS[dir].name;
+        arm.setAttribute("aria-hidden","true");
+        button.appendChild(arm);
+      });
+      const core = document.createElement("span");
+      core.className = "core";
+      core.setAttribute("aria-hidden","true");
+      button.appendChild(core);
+
+      if (i!==0 && i!==tiles.length-1) {
+        const number = document.createElement("span");
+        number.className = "tile-num";
+        number.textContent = i+1;
+        button.appendChild(number);
+      }
+
+      button.addEventListener("click", () => rotateTile(i));
+      board.appendChild(button);
+    });
+
+    $("boardSize").textContent = `SIATKA ${n} × ${n}`;
+    $("boardState").textContent = won ? "SYGNAŁ STABILNY" :
+      powered.has(tiles.length-1) ? "RDZEŃ OTRZYMUJE ENERGIĘ" : "PRZERWANY OBWÓD";
+    $("progress").style.width = `${powered.size/tiles.length*100}%`;
+  }
+
+  function tileLabel(tile,i,n) {
+    const pos = `wiersz ${Math.floor(i/n)+1}, kolumna ${i%n+1}`;
+    const ports = tile.ports.map(d => DIRS[d].name).join(", ") || "brak";
+    let type = i===0 ? "Źródło energii" :
+      i===tiles.length-1 ? "Rdzeń docelowy" : "Moduł przewodzący";
+    return `${type}, ${pos}. Połączenia: ${ports}. Kliknij, aby obrócić.`;
+  }
+
+  function rotateTile(i) {
+    if (won) return;
+    const tile = tiles[i];
+    tile.rotation = (tile.rotation+1)%4;
+    tile.ports = rotatePorts(tile.original,tile.rotation);
+    moves++;
+    $("moves").textContent = moves;
+    $("hintText").classList.remove("show");
+    renderBoard();
+
+    const powered = getPowered();
+    if (powered.has(tiles.length-1)) {
+      finishLevel();
+    } else if (powered.size > 1) {
+      setMessage("Sygnał częściowo przywrócony",`Energia dociera do ${powered.size} z ${tiles.length} modułów. Szukaj kolejnego zgodnego połączenia.`);
+    } else {
+      setMessage("Obwód nadal przerwany","Sprawdź kierunki wyjść i wejść. Dwa sąsiadujące moduły muszą mieć porty skierowane ku sobie.");
+    }
+  }
+
+  function setMessage(title,text,success=false) {
+    const message = $("message");
+    message.classList.toggle("success",success);
+    message.querySelector(".message-icon").textContent = success ? "✓" : "⌁";
+    message.querySelector("p").innerHTML = "";
+    const strong = document.createElement("strong");
+    strong.textContent = title+": ";
+    message.querySelector("p").append(strong,document.createTextNode(text));
+  }
+
+  function updateStats() {
+    $("score").textContent = score.toLocaleString("pl-PL");
+    $("completed").innerHTML = `${completed.size}<span style="font-size:14px;color:var(--muted)"> / 5</span>`;
+    $("chapter").textContent = String(level+1).padStart(2,"0");
+    $("moves").textContent = moves;
+  }
+
+  function updateLevels() {
+    const container = $("levels");
+    container.innerHTML = "";
+    LEVELS.forEach((item,i) => {
+      const b = document.createElement("button");
+      b.className = "level";
+      b.textContent = completed.has(i) ? "✓" : i+1;
+      if (i===level) b.classList.add("active");
+      if (completed.has(i)) b.classList.add("done");
+      b.disabled = i > 0 && !completed.has(i-1) && !completed.has(i);
+      b.setAttribute("aria-label",`Poziom ${i+1}: ${item.title}`);
+      b.addEventListener("click",() => loadLevel(i));
+      container.appendChild(b);
+    });
+    const item = LEVELS[level];
+    $("levelNote").innerHTML = `Poziom ${level+1} · ${item.title}<br>Plansza ${item.size} × ${item.size}`;
+    $("objectiveTitle").textContent = level===4 ? "Uruchom protokół zero" : "Nawiąż połączenie";
+    $("objectiveText").textContent = `Doprowadź energię ze źródła S do rdzenia R. Każdy klik obraca jeden moduł o 90°. Premia za sprawne rozwiązanie: do ${item.points} pkt.`;
+    $("nextBtn").disabled = !completed.has(level) || level===4;
+  }
+
+  function formatTime(seconds) {
+    const min = Math.floor(seconds/60);
+    const sec = seconds%60;
+    return `${String(min).padStart(2,"0")}:${String(sec).padStart(2,"0")}`;
+  }
+
+  function startTimer() {
+    clearInterval(timerId);
+    startedAt = Date.now();
+    $("time").textContent = "00:00";
+    timerId = setInterval(() => {
+      if (!won) $("time").textContent = formatTime(Math.floor((Date.now()-startedAt)/1000));
+    },1000);
+  }
+
+  function finishLevel() {
+    if (won) return;
+    won = true;
+    clearInterval(timerId);
+    renderBoard();
+
+    const seconds = Math.floor((Date.now()-startedAt)/1000);
+    const base = LEVELS[level].points;
+    const movePenalty = Math.max(0,moves-LEVELS[level].size)*8;
+    const timePenalty = Math.floor(seconds/10)*3;
+    const hintPenalty = hintsUsed*50;
+    const gained = Math.max(50,base-movePenalty-timePenalty-hintPenalty);
+    score += gained;
+    completed.add(level);
+    best[level] = Math.min(best[level] || Infinity,moves);
+    saveGame();
+    updateStats();
+    updateLevels();
+    $("nextBtn").disabled = level===4;
+
+    setMessage("Połączenie przywrócone!","Energia dotarła do rdzenia. Dobra robota, techniku.",true);
+    $("modalIcon").textContent = "✦";
+    $("modalEyebrow").textContent = "MISJA ZAKOŃCZONA // "+String(level+1).padStart(2,"0");
+    $("modalTitle").textContent = level===4 ? "Protokół zero odblokowany!" : "Energia przywrócona!";
+    $("modalText").textContent = `Wykonano ${moves} ruchów w czasie ${formatTime(seconds)}. ${hintsUsed ? "Użyte podpowiedzi obniżyły premię. " : ""}Sieć działa prawidłowo.`;
+    $("modalScore").textContent = `+${gained.toLocaleString("pl-PL")} pkt`;
+    $("modalNext").textContent = level===4 ? "Zagraj ponownie ↻" : "Następna misja →";
+    $("overlay").classList.add("show");
+  }
+
+  function saveGame() {
+    try {
+      localStorage.setItem("circuitBreakerSave",JSON.stringify({
+        score,completed:[...completed],best
+      }));
+    } catch (_) {}
+  }
+
+  function loadLevel(index) {
+    if (index<0 || index>=LEVELS.length) return;
+    if (index>0 && !completed.has(index-1) && !completed.has(index)) return;
+
+    level = index;
+    moves = 0;
+    hintsUsed = 0;
+    won = false;
+    $("overlay").classList.remove("show");
+    $("hintText").classList.remove("show");
+    $("hintBtn").disabled = false;
+    $("hintBtn").textContent = "◈ Analizuj sygnał (podpowiedź)";
+    shuffleBoard();
+    renderBoard();
+    updateStats();
+    updateLevels();
+    startTimer();
+    setMessage("System diagnostyczny","Połączenie przerwane. Obracaj moduły i połącz źródło S z rdzeniem R.");
+    $("nextBtn").disabled = true;
+  }
+
+  function showHint() {
+    if (won) return;
+    hintsUsed++;
+    const hint = $("hintText");
+    hint.textContent = hintsUsed===1
+      ? "Wskazówka: źródło S musi mieć port skierowany w stronę sąsiedniego modułu. Sprawdzaj po kolei, czy porty sąsiadów są skierowane ku sobie."
+      : "Wskazówka: każda płytka należy do trasy. Porównaj orientację jej przewodów z kierunkami sąsiadujących modułów. Obrót o 90° zmienia kierunek wszystkich portów.";
+    hint.classList.add("show");
+    $("hintBtn").textContent = "◈ Podpowiedź wykorzystana";
+    $("hintBtn").disabled = true;
+    setMessage("Analiza sygnału","Diagnostyka podpowiada, by sprawdzać porty sąsiednich modułów. Za podpowiedź obowiązuje kara punktowa.");
+  }
+
+  $("hintBtn").addEventListener("click",showHint);
+  $("resetBtn").addEventListener("click",() => {
+    moves = 0;
+    hintsUsed = 0;
+    won = false;
+    tiles.forEach((tile,i) => {
+      tile.rotation = initialRotations[i];
+      tile.ports = rotatePorts(tile.original,tile.rotation);
+    });
+    $("hintText").classList.remove("show");
+    $("hintBtn").disabled = false;
+    $("hintBtn").textContent = "◈ Analizuj sygnał (podpowiedź)";
+    $("overlay").classList.remove("show");
+    renderBoard();
+    updateStats();
+    startTimer();
+    setMessage("Poziom zresetowany","Przywrócono początkowe ustawienia obwodu. Spróbuj innej strategii.");
+  });
+  $("nextBtn").addEventListener("click",() => {
+    if (level<LEVELS.length-1) loadLevel(level+1);
+  });
+  $("modalNext").addEventListener("click",() => {
+    $("overlay").classList.remove("show");
+    if (level<LEVELS.length-1) {
+      loadLevel(level+1);
+    } else {
+      score = 0;
+      completed.clear();
+      best = {};
+      saveGame();
+      loadLevel(0);
+    }
+  });
+  $("modalClose").addEventListener("click",() => $("overlay").classList.remove("show"));
+  $("overlay").addEventListener("click",e => {
+    if (e.target===$("overlay")) $("overlay").classList.remove("show");
+  });
+  document.addEventListener("keydown",e => {
+    if (e.key==="Escape") $("overlay").classList.remove("show");
+  });
+
+  updateStats();
+  loadLevel(0);
+})();
+</script>
+</body>
+</html>

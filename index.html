@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TACTICAL: Logic Breach</title>
+<style>
+:root{--lime:#b8f34a;--orange:#ff9e3d;--panel:rgba(10,16,20,.94);--line:#35434a}
+*{box-sizing:border-box}body{margin:0;background:#090d10;color:#edf2f4;font:14px/1.4 system-ui,Segoe UI,Arial;overflow:hidden}
+canvas{display:block;width:100vw;height:100vh;image-rendering:pixelated;cursor:crosshair}
+#hud{position:fixed;inset:0;pointer-events:none;text-shadow:0 2px 3px #000}
+.top{position:absolute;top:16px;left:50%;transform:translateX(-50%);display:flex;gap:8px;align-items:center;background:#0b1115dd;border:1px solid #40515a;padding:8px 14px;clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px)}
+.pill{padding:5px 10px;background:#182229;border:1px solid #35434a;font-weight:800;letter-spacing:.08em}.green{color:var(--lime)}.orange{color:var(--orange)}
+.bottomleft{position:absolute;left:20px;bottom:18px;background:#0b1115dd;border-left:3px solid var(--lime);padding:10px 14px;min-width:180px}
+.bottomright{position:absolute;right:20px;bottom:18px;text-align:right;background:#0b1115dd;padding:10px 14px;border-right:3px solid var(--orange)}
+#objective{position:absolute;top:82px;left:50%;transform:translateX(-50%);text-align:center;background:#10191dcc;padding:9px 16px;border:1px solid #40515a;max-width:90vw}
+#crosshair{position:absolute;left:50%;top:50%;width:18px;height:18px;transform:translate(-50%,-50%)}
+#crosshair:before,#crosshair:after{content:"";position:absolute;background:#eaffd0;box-shadow:0 0 3px #000}
+#crosshair:before{left:8px;top:1px;width:2px;height:16px}#crosshair:after{top:8px;left:1px;width:16px;height:2px}
+#toast{position:absolute;top:28%;left:50%;transform:translateX(-50%);font-weight:900;font-size:18px;color:var(--lime);letter-spacing:.08em;opacity:0;transition:opacity .2s}
+.overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at center,#18252bd9,#05080bf5);z-index:5;padding:18px}
+.panel{width:min(760px,96vw);max-height:92vh;overflow:auto;background:var(--panel);border:1px solid #4a5d66;box-shadow:0 20px 80px #000;padding:26px;position:relative}
+.panel:before{content:"";position:absolute;left:0;top:0;width:5px;height:100%;background:var(--lime)}
+h1{font-size:clamp(28px,5vw,48px);line-height:1;margin:0 0 12px;letter-spacing:-.04em}h2{margin:0 0 14px;font-size:25px}p{color:#b8c5ca}.eyebrow{color:var(--lime);font-weight:900;letter-spacing:.18em;font-size:11px;margin-bottom:12px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px;margin:18px 0}
+.card{background:#131e24;border:1px solid #35464e;padding:14px;text-align:left;color:#eef4f5;cursor:pointer;transition:.15s}
+.card:hover,.card.selected{border-color:var(--lime);background:#202d2d;transform:translateY(-2px)}
+.card strong{display:block;font-size:17px;margin:4px 0}.card small{color:#a7b5bb}.price{color:var(--lime);font-weight:900;float:right}
+button{border:0;background:var(--lime);color:#10150a;font-weight:900;padding:12px 18px;cursor:pointer;letter-spacing:.06em}
+button:hover{filter:brightness(1.1)}button.secondary{background:#26343b;color:#f2f6f7;border:1px solid #52636b}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}.rules{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}.rule{border-top:2px solid #4b5e67;padding-top:8px;color:#b8c5ca}
+.key{display:inline-block;border:1px solid #5c6a70;background:#202b31;border-radius:3px;padding:2px 6px;color:#fff;font-weight:800}
+.hidden{display:none!important}
+#quizAnswers{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:16px 0}
+.answer{background:#18252b;border:1px solid #40515a;color:#fff;padding:12px;text-align:left;cursor:pointer}.answer:hover{border-color:var(--lime)}
+@media(max-width:600px){.bottomleft{left:8px;bottom:8px}.bottomright{right:8px;bottom:8px}#objective{top:76px;font-size:12px}.panel{padding:22px 18px}}
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="hud" class="hidden">
+ <div class="top"><span class="pill green">TACTICAL</span><span class="pill">ROUND <span id="round">01</span></span><span class="pill">CREDITS <span class="green" id="credits">800</span></span><span class="pill">ALERT <span class="orange" id="alert">LOW</span></span></div>
+ <div id="objective">CEL: ZNAJDŹ TERMINAL <b>T</b> I ROZWIĄŻ ZAGADKĘ</div>
+ <div id="crosshair"></div><div id="toast"></div>
+ <div class="bottomleft"><div class="green" style="font-weight:900;letter-spacing:.12em">OPERATOR</div><div>HP <b id="hp">100</b> ▰▰▰▰▰</div><div>AMMO <b id="ammo">12 / 48</b></div><div style="color:#9aabb2;font-size:11px;margin-top:5px">WASD ruch · SHIFT sprint</div></div>
+ <div class="bottomright"><div id="weaponName" class="orange" style="font-weight:900">P2000 // SERVICE</div><div><span class="key">B</span> ZAKUPY &nbsp; <span class="key">E</span> INTERAKCJA</div><div><span class="key">R</span> PRZEŁADUJ &nbsp; <span class="key">ESC</span> MENU</div></div>
+</div>
+<div id="start" class="overlay">
+ <div class="panel">
+  <div class="eyebrow">TAKTYCZNY SYMULATOR • EDYCJA EDU</div>
+  <h1>LOGIC <span class="green">BREACH</span></h1>
+  <p>Autorska, przeglądarkowa strzelanka taktyczna z widokiem FPS, zakupami wyposażenia i łamigłówką logiczną. Nie wymaga instalacji ani bibliotek.</p>
+  <div class="rules">
+   <div class="rule"><b class="green">01 / CEL</b><br>Odszukaj terminal w obiekcie, rozwiąż ciąg logiczny, a następnie dotrzyj do strefy ewakuacji.</div>
+   <div class="rule"><b class="green">02 / EKONOMIA</b><br>Masz 800 kredytów. Kup broń i amunicję klawiszem B. Za eliminacje zdobywasz nagrody.</div>
+   <div class="rule"><b class="green">03 / TAKTYKA</b><br>Poruszaj się, celuj myszą i unikaj przeciwników. To trening refleksu oraz rozumowania.</div>
+  </div>
+  <p><b>Sterowanie:</b> <span class="key">WASD</span> ruch, mysz celowanie, LPM strzał, <span class="key">E</span> użyj, <span class="key">B</span> zakupy, <span class="key">R</span> przeładuj, <span class="key">SHIFT</span> sprint, <span class="key">ESC</span> menu.</p>
+  <div class="actions"><button id="startBtn">WEJDŹ DO MISJI →</button><button class="secondary" id="howBtn">ZASADY I WSKAZÓWKI</button></div>
+  <p id="how" class="hidden">Terminal jest oznaczony żółtym symbolem T. Podejdź blisko i naciśnij E. Wybierz odpowiedź zgodną z regułą ciągu. Błędna odpowiedź podnosi alarm, poprawna odblokowuje wyjście. Celem nie jest samo strzelanie — obserwuj mapę i planuj trasę.</p>
+ </div>
+</div>
+<div id="shop" class="overlay hidden"><div class="panel"><div class="eyebrow">ARMORY / PRE-ROUND</div><h2>Wybierz wyposażenie</h2><p>Kupno natychmiast zmienia aktywną broń. Saldo: <b class="green" id="shopCredits">800</b> CR</p><div class="grid" id="shopGrid"></div><div class="actions"><button id="closeShop">WRÓĆ DO MISJI</button><button class="secondary" id="ammoBuy">AMUNICJA +24 / 100 CR</button></div></div></div>
+<div id="quiz" class="overlay hidden"><div class="panel"><div class="eyebrow">SECURE TERMINAL / LOGIC CHECK</div><h2>Odszyfruj sekwencję</h2><p id="question">2, 4, 8, 16, ?</p><div id="quizAnswers"></div><p id="quizFeedback"></p><div class="actions"><button id="quizClose" class="secondary">ZAMKNIJ TERMINAL</button></div></div></div>
+<div id="end" class="overlay hidden"><div class="panel"><div class="eyebrow">MISSION REPORT</div><h1 id="endTitle">MISJA <span class="green">ZAKOŃCZONA</span></h1><p id="endText"></p><div class="actions"><button id="restart">ZAGRAJ PONOWNIE</button></div></div></div>
+<script>
+(()=>{
+'use strict';
+const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
+let W=innerWidth,H=innerHeight, playing=false,menu=true,shopOpen=false,quizOpen=false,won=false;
+function resize(){W=canvas.width=Math.max(320,innerWidth);H=canvas.height=Math.max(240,innerHeight)}addEventListener('resize',resize);resize();
+const $=id=>document.getElementById(id);
+const map=[
+'11111111111111111111',
+'10000000000000000001',
+'10222000001110000001',
+'10002000001000000001',
+'10002000001003330001',
+'10000000000003000001',
+'11101111000003000001',
+'10000001000000000001',
+'10000001002220000001',
+'10000000002000000001',
+'10003300000000000001',
+'10003000001111000001',
+'10003000000001000001',
+'10000000000001000001',
+'10000000000000000001',
+'11111111111111111111'
+];
+const MW=map[0].length,MH=map.length;
+const wall=(x,y)=>{let a=map[Math.floor(y)]?.[Math.floor(x)];return !a||a!=='0'};
+const player={x:2.5,y:2.5,a:.12,hp:100,credits:800,weapon:'P2000',ammo:12,reserve:48,reload:0,shot:0};
+const weapons=[
+{name:'P2000',label:'P2000 // SERVICE',price:0,damage:28,mag:12,ammo:48,rate:260,spread:.025,desc:'Pistolet • celny i ekonomiczny'},
+{name:'MP5',label:'MP5 // COMPACT',price:400,damage:19,mag:30,ammo:90,rate:105,spread:.055,desc:'SMG • szybki ogień na bliski dystans'},
+{name:'M4',label:'M4 // TACTICAL',price:900,damage:32,mag:25,ammo:75,rate:145,spread:.032,desc:'Karabinek • stabilny i wszechstronny'},
+{name:'DMR',label:'DMR // MARKSMAN',price:1200,damage:70,mag:8,ammo:32,rate:520,spread:.008,desc:'Karabin wyborowy • mocny pojedynczy strzał'}
+];
+let active=weapons[0],enemies=[],keys={},zBuffer=[],last=0,terminal={x:15.5,y:8.5},exit={x:17.5,y:13.5},terminalSolved=false,alarm=0,kills=0,toastTimer=0,moveBob=0;
+const puzzles=[
+{q:'2, 4, 8, 16, ?',a:['18','24','32','30'],correct:2,why:'Każdy wyraz mnożymy przez 2.'},
+{q:'3, 6, 11, 18, 27, ?',a:['36','38','40','42'],correct:1,why:'Dodajemy kolejno 3, 5, 7, 9, a następnie 11.'},
+{q:'Która liczba nie pasuje: 9, 16, 25, 36, 48?',a:['9','25','36','48'],correct:3,why:'Pozostałe liczby są kwadratami liczb całkowitych.'},
+{q:'A=1, B=2... Ile wynosi suma liter słowa KOT?',a:['34','36','38','40'],correct:1,why:'K=11, O=15, T=20. Suma wynosi 46. Ups — poprawna odpowiedź to 46.',a:['34','36','46','40'],correct:2}
+];
+let puzzleIndex=0;
+function spawn(){enemies=[];[[8.5,2.5],[14.5,5.5],[5.5,11.5],[16.5,11.5],[12.5,13.5]].forEach((p,i)=>enemies.push({x:p[0],y:p[1],hp:100,alive:true,phase:i,fire:Math.random()*2}))}
+function reset(){player.x=2.5;player.y=2.5;player.a=.12;player.hp=100;player.credits=800;player.weapon='P2000';player.ammo=12;player.reserve=48;player.reload=0;active=weapons[0];terminalSolved=false;alarm=0;kills=0;puzzleIndex=0;won=false;spawn();updateHud()}
+function updateHud(){$('credits').textContent=player.credits;$('shopCredits').textContent=player.credits;$('hp').textContent=Math.max(0,Math.ceil(player.hp));$('ammo').textContent=player.ammo+' / '+player.reserve;$('weaponName').textContent=active.label;$('alert').textContent=alarm>2?'HIGH':alarm?'ELEVATED':'LOW';$('objective').innerHTML=terminalSolved?'CEL: DOTRZYJ DO STREFY EWAKUACJI <b class="green">◆</b>':'CEL: ZNAJDŹ TERMINAL <b>T</b> I ROZWIĄŻ ZAGADKĘ';$('round').textContent='01'}
+function say(t){$('toast').textContent=t;$('toast').style.opacity=1;toastTimer=1.8}
+function show(id){$(id).classList.remove('hidden')}function hide(id){$(id).classList.add('hidden')}
+function start(){hide('start');hide('end');show('hud');playing=true;menu=false;canvas.requestPointerLock?.();last=performance.now()}
+$('startBtn').onclick=start;$('howBtn').onclick=()=> $('how').classList.toggle('hidden');
+$('restart').onclick=()=>{reset();start()};
+$('closeShop').onclick=()=>closeShop();$('quizClose').onclick=()=>closeQuiz();
+$('ammoBuy').onclick=()=>{if(player.credits>=100){player.credits-=100;player.reserve+=24;updateHud();renderShop()}else say('ZA MAŁO KREDYTÓW')};
+function openShop(){if(!playing||quizOpen)return;shopOpen=true;show('shop');renderShop();document.exitPointerLock?.()}
+function closeShop(){shopOpen=false;hide('shop');if(playing)canvas.requestPointerLock?.()}
+function renderShop(){$('shopCredits').textContent=player.credits;$('shopGrid').innerHTML='';weapons.forEach(w=>{let el=document.createElement('button');el.className='card'+(active.name===w.name?' selected':'');el.innerHTML=`<span class="price">${w.price===0?'DARMOWA':w.price+' CR'}</span><strong>${w.name}</strong><small>${w.desc}<br>${w.mag} nabojów / magazynek</small>`;el.onclick=()=>{if(active===w){say('TA BROŃ JEST JUŻ AKTYWNA');return}if(player.credits<w.price){say('ZA MAŁO KREDYTÓW');return}player.credits-=w.price;active=w;player.weapon=w.name;player.ammo=w.mag;player.reserve=w.ammo;updateHud();renderShop();say('WYPOSAŻENIE ZAKTUALIZOWANE')};$('shopGrid').appendChild(el)})}
+function openQuiz(){if(quizOpen||terminalSolved)return;quizOpen=true;show('quiz');document.exitPointerLock?.();const p=puzzles[puzzleIndex%puzzles.length];$('question').textContent=p.q;$('quizFeedback').textContent='Wybierz jedną odpowiedź.';$('quizAnswers').innerHTML='';p.a.forEach((a,i)=>{let b=document.createElement('button');b.className='answer';b.textContent=a;b.onclick=()=>{if(i===p.correct){terminalSolved=true;player.credits+=500;$('quizFeedback').innerHTML='<span class="green">DOSTĘP PRZYZNANY.</span> '+p.why;updateHud();say('TERMINAL ODBLOKOWANY +500 CR');[...$('quizAnswers').children].forEach(x=>x.disabled=true);$('objective').innerHTML='CEL: DOTRZYJ DO STREFY EWAKUACJI <b class="green">◆</b>';setTimeout(()=>{closeQuiz();},1800)}else{alarm++;player.hp-=8;$('quizFeedback').innerHTML='<span class="orange">BŁĘDNY KOD.</span> Alarm +1, utrata 8 HP. Spróbuj ponownie.';updateHud();if(player.hp<=0)finish(false)}};$('quizAnswers').appendChild(b)})}
+function closeQuiz(){quizOpen=false;hide('quiz');if(playing&&!shopOpen)canvas.requestPointerLock?.()}
+function finish(success){playing=false;won=success;document.exitPointerLock?.();show('end');$('endTitle').innerHTML=success?'MISJA <span class="green">ZAKOŃCZONA</span>':'MISJA <span class="orange">PRZERWANA</span>';$('endText').textContent=success?`Świetna robota! Rozwiązano zagadkę, wyeliminowano ${kills} przeciwników i zdobyto ${player.credits} kredytów. Rozumowanie i taktyka — zaliczone.`:`Operator utracił wszystkie punkty zdrowia. Eliminacje: ${kills}. Spróbuj ponownie, oszczędzaj amunicję i sprawdź regułę ciągu.`}
+addEventListener('keydown',e=>{keys[e.code]=true;if(e.code==='KeyB'&&!e.repeat)shopOpen?closeShop():openShop();if(e.code==='Escape'&&playing&&!shopOpen&&!quizOpen){playing=false;document.exitPointerLock?.();show('start')}if(e.code==='KeyR'&&!e.repeat)reload();if(e.code==='KeyE'&&!e.repeat)interact()});
+addEventListener('keyup',e=>keys[e.code]=false);
+addEventListener('mousemove',e=>{if(playing&&!shopOpen&&!quizOpen&&document.pointerLockElement===canvas)player.a+=e.movementX*.0024});
+addEventListener('mousedown',e=>{if(e.button===0&&playing&&!shopOpen&&!quizOpen&&document.pointerLockElement===canvas)shoot()});
+canvas.addEventListener('click',()=>{if(playing&&!shopOpen&&!quizOpen&&document.pointerLockElement!==canvas)canvas.requestPointerLock?.()});
+function reload(){if(!playing||shopOpen||quizOpen||player.reload>0||player.ammo===active.mag||player.reserve<=0)return;player.reload=1.15;say('PRZEŁADOWANIE...')}
+function interact(){if(!playing||shopOpen||quizOpen)return;let d=Math.hypot(player.x-terminal.x,player.y-terminal.y);if(!terminalSolved&&d<1.5){openQuiz();return}if(terminalSolved&&Math.hypot(player.x-exit.x,player.y-exit.y)<1.6){finish(true);return}say('BRAK INTERAKCJI W ZASIĘGU')}
+function shoot(){if(player.shot>0||player.reload>0)return;if(player.ammo<=0){say('PUSTY MAGAZYNEK — R');return}player.ammo--;player.shot=active.rate/1000;let target=null,best=.11;for(let e of enemies){if(!e.alive)continue;let dx=e.x-player.x,dy=e.y-player.y,d=Math.hypot(dx,dy),ang=Math.atan2(dy,dx)-player.a;ang=Math.atan2(Math.sin(ang),Math.cos(ang));if(Math.abs(ang)<best&&d<9&&!rayBlocked(player.x,player.y,e.x,e.y)){best=Math.abs(ang);target=e}}if(target){target.hp-=active.damage;if(target.hp<=0){target.alive=false;kills++;player.credits+=150;say('CEL WYELIMINOWANY +150 CR');updateHud()}else say('TRAFIENIE')}else say('PUDŁO');updateHud()}
+function rayBlocked(x,y,tx,ty){let d=Math.hypot(tx-x,ty-y),n=Math.ceil(d*12);for(let i=1;i<n;i++){let t=i/n;if(wall(x+(tx-x)*t,y+(ty-y)*t))return true}return false}
+function move(dt){if(!playing||shopOpen||quizOpen)return;let speed=(keys.ShiftLeft?3.6:2.35)*dt,dx=0,dy=0;if(keys.KeyW){dx+=Math.cos(player.a)*speed;dy+=Math.sin(player.a)*speed}if(keys.KeyS){dx-=Math.cos(player.a)*speed;dy-=Math.sin(player.a)*speed}if(keys.KeyA){dx+=Math.cos(player.a-Math.PI/2)*speed;dy+=Math.sin(player.a-Math.PI/2)*speed}if(keys.KeyD){dx+=Math.cos(player.a+Math.PI/2)*speed;dy+=Math.sin(player.a+Math.PI/2)*speed}if(!wall(player.x+dx*1.8,player.y))player.x+=dx;if(!wall(player.x,player.y+dy*1.8))player.y+=dy;if(Math.abs(dx)+Math.abs(dy)>.001)moveBob+=dt*12;if(player.shot>0)player.shot-=dt;if(player.reload>0){player.reload-=dt;if(player.reload<=0){let n=Math.min(active.mag-player.ammo,player.reserve);player.ammo+=n;player.reserve-=n;updateHud()}}
+for(let e of enemies){if(!e.alive)continue;let d=Math.hypot(player.x-e.x,player.y-e.y);e.fire-=dt;if(d<7&&!rayBlocked(e.x,e.y,player.x,player.y)){let ang=Math.atan2(player.y-e.y,player.x-e.x);e.x+=Math.cos(ang)*dt*.18;e.y+=Math.sin(ang)*dt*.18;if(e.fire<=0){e.fire=1.2+Math.random()*1.3;if(d<5){player.hp-=4+alarm;updateHud();if(player.hp<=0)finish(false)}}}}
+if(Math.random()<dt*.1)alarm=Math.max(0,alarm-.03);if(terminalSolved&&Math.hypot(player.x-exit.x,player.y-exit.y)<1.3)say('NACIŚNIJ E, ABY EWAKUOWAĆ')}
+function cast(){const fov=Math.PI/3, rays=Math.ceil(W/2), strip=W/rays;zBuffer=new Array(rays);for(let i=0;i<rays;i++){let a=player.a-fov/2+(i/rays)*fov,dist=0,hit=0;while(dist<20&&!hit){dist+=.025;if(wall(player.x+Math.cos(a)*dist,player.y+Math.sin(a)*dist))hit=1}let corrected=dist*Math.cos(a-player.a);zBuffer[i]=corrected;let h=Math.min(H*2,H/(corrected+.001)),mx=player.x+Math.cos(a)*dist,my=player.y+Math.sin(a)*dist,side=(Math.abs(mx-Math.round(mx))<Math.abs(my-Math.round(my)));let texture=Math.floor((side?my:mx)*6)%2;let shade=Math.max(24,155-corrected*15)-(side?26:0)-texture*7;ctx.fillStyle=`rgb(${shade*.62},${shade*.82},${shade})`;ctx.fillRect(i*strip,(H-h)/2,strip+1,h);ctx.fillStyle='rgba(0,0,0,.12)';ctx.fillRect(i*strip,(H-h)/2,strip+1,Math.max(1,h*.025));}
+}
+function drawSprite(x,y,color,type,scale=1){let dx=x-player.x,dy=y-player.y,d=Math.hypot(dx,dy),ang=Math.atan2(dy,dx)-player.a;ang=Math.atan2(Math.sin(ang),Math.cos(ang));if(Math.abs(ang)>Math.PI/3||d<.2)return;let sx=(.5+ang/(Math.PI/3))*W,idx=Math.floor(sx/(W/zBuffer.length));if(idx<0||idx>=zBuffer.length||d>zBuffer[idx]+.2)return;let size=Math.min(H,H/(d*.85))*scale,top=H/2-size*.5;ctx.fillStyle='rgba(0,0,0,.35)';ctx.beginPath();ctx.ellipse(sx,H/2+size*.42,size*.19,size*.055,0,0,Math.PI*2);ctx.fill();if(type==='enemy'){ctx.fillStyle='#18232a';ctx.fillRect(sx-size*.16,top+size*.34,size*.32,size*.48);ctx.fillStyle=color;ctx.fillRect(sx-size*.18,top+size*.2,size*.36,size*.22);ctx.fillStyle='#c8d0d1';ctx.fillRect(sx-size*.1,top+size*.08,size*.2,size*.16);ctx.fillStyle='#f3b34b';ctx.fillRect(sx-size*.09,top+size*.14,size*.18,size*.025);ctx.fillStyle='#080b0d';ctx.fillRect(sx-size*.24,top+size*.39,size*.48,size*.055);ctx.fillStyle='#d64f3c';ctx.fillRect(sx-size*.22,top+size*.4,size*.44*(Math.max(0,player.hp)/100),size*.025)}else{ctx.fillStyle='#f5c54b';ctx.fillRect(sx-size*.24,top+size*.2,size*.48,size*.48);ctx.fillStyle='#172126';ctx.font=`bold ${Math.max(12,size*.35)}px Arial`;ctx.textAlign='center';ctx.fillText(type==='terminal'?'T':'EXIT',sx,top+size*.49);ctx.fillStyle='#fff';ctx.fillRect(sx-size*.07,top+size*.05,size*.14,size*.12)}}
+function render(){ctx.fillStyle='#64747a';ctx.fillRect(0,0,W,H/2);ctx.fillStyle='#242d31';ctx.fillRect(0,H/2,W,H/2);let grad=ctx.createLinearGradient(0,H/2,0,H);grad.addColorStop(0,'#353e40');grad.addColorStop(1,'#111619');ctx.fillStyle=grad;ctx.fillRect(0,H/2,W,H/2);cast();let sprites=[];enemies.forEach(e=>{if(e.alive)sprites.push({x:e.x,y:e.y,c:'#aab4b3',t:'enemy',s:1})});if(!terminalSolved)sprites.push({x:terminal.x,y:terminal.y,c:'#f5c54b',t:'terminal',s:.72});else sprites.push({x:exit.x,y:exit.y,c:'#9de74a',t:'exit',s:.9});sprites.sort((a,b)=>Math.hypot(b.x-player.x,b.y-player.y)-Math.hypot(a.x-player.x,a.y-player.y));sprites.forEach(s=>drawSprite(s.x,s.y,s.c,s.t,s.s));drawWeapon();drawMinimap();if(player.shot>active.rate/1000-.07){ctx.fillStyle='rgba(255,210,120,.18)';ctx.fillRect(0,0,W,H)}}
+function drawWeapon(){let bob=Math.sin(moveBob)*5,baseY=H-20+bob;ctx.save();ctx.translate(W*.72,baseY);ctx.fillStyle='#111719';ctx.beginPath();ctx.moveTo(-20,0);ctx.lineTo(-6,-H*.17);ctx.lineTo(65,-H*.19);ctx.lineTo(105,-H*.08);ctx.lineTo(115,0);ctx.fill();ctx.fillStyle='#3d4b50';ctx.fillRect(-10,-H*.16,90,H*.075);ctx.fillStyle='#182126';ctx.fillRect(0,-H*.19,65,H*.035);ctx.fillStyle='#68777b';ctx.fillRect(20,-H*.205,22,5);ctx.fillStyle='#242c30';ctx.fillRect(65,-H*.13,19,H*.1);ctx.fillStyle='#69797b';ctx.fillRect(70,-H*.13,5,H*.07);if(player.shot>active.rate/1000-.07){ctx.fillStyle='#ffd777';ctx.beginPath();ctx.moveTo(80,-H*.2);ctx.lineTo(115,-H*.27);ctx.lineTo(100,-H*.17);ctx.lineTo(126,-H*.2);ctx.lineTo(88,-H*.13);ctx.fill()}ctx.restore()}
+function drawMinimap(){let s=5,ox=W- MW*s-20,oy=80;ctx.fillStyle='#071014cc';ctx.fillRect(ox-5,oy-5,MW*s+10,MH*s+10);for(let y=0;y<MH;y++)for(let x=0;x<MW;x++){ctx.fillStyle=map[y][x]==='0'?'#26353a':map[y][x]==='3'?'#4a3b28':'#718087';ctx.fillRect(ox+x*s,oy+y*s,s-1,s-1)}ctx.fillStyle='#b8f34a';ctx.beginPath();ctx.arc(ox+player.x*s,oy+player.y*s,3,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#b8f34a';ctx.beginPath();ctx.moveTo(ox+player.x*s,oy+player.y*s);ctx.lineTo(ox+(player.x+Math.cos(player.a))*s*2,oy+(player.y+Math.sin(player.a))*s*2);ctx.stroke();ctx.fillStyle='#f5c54b';if(!terminalSolved)ctx.fillRect(ox+terminal.x*s-2,oy+terminal.y*s-2,4,4);else{ctx.fillStyle='#9de74a';ctx.fillRect(ox+exit.x*s-2,oy+exit.y*s-2,4,4)}}
+function loop(t){let dt=Math.min(.04,(t-last)/1000||0);last=t;if(playing&&!shopOpen&&!quizOpen){move(dt);render();if(toastTimer>0){toastTimer-=dt;if(toastTimer<=0)$('toast').style.opacity=0}}else if(!playing&&!menu){render()}requestAnimationFrame(loop)}
+reset();render();requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
